@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>竞彩工作台</title>
+<style>
+  :root {
+    --ink: #101b2b;
+    --ink2: #33445c;
+    --muted: #75859a;
+    --line: #e2e8f0;
+    --line2: #f1f5f9;
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --accent: #0e7c6b;
+    --accent-bg: #e7f4f1;
+    --fav: #1c6fd6;
+    --cold: #d9661f;
+    --win: #0f7b4f;
+    --win-bg: #e6f5ee;
+    --draw: #8a6d1f;
+    --draw-bg: #fbf3dd;
+    --lose: #b03a2e;
+    --lose-bg: #fdeceb;
+    --r: 14px;
+    --shadow: 0 1px 2px rgba(16, 32, 48, .04), 0 10px 28px -18px rgba(16, 32, 48, .35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button, input, select, textarea { font: inherit; color: inherit; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 18px;
+    padding: 9px 22px;
+    background: rgba(255, 255, 255, .9);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+  .logo {
+    width: 32px; height: 32px; display: grid; place-items: center;
+    border-radius: 9px;
+    background: linear-gradient(145deg, #12897a, #0a5f54);
+    color: #fff; font-size: 16px;
+    box-shadow: 0 4px 10px -3px rgba(10, 95, 84, .55);
+  }
+
+  .brand b { font-size: 15px; letter-spacing: .2px; }
+
+  .nav { display: flex; gap: 4px; padding: 3px; background: var(--line2); border-radius: 9px; }
+
+  .nav button {
+    border: 0; background: transparent;
+    padding: 5px 14px; border-radius: 7px;
+    font-size: 12.5px; font-weight: 650; color: var(--muted); cursor: pointer;
+  }
+
+  .nav button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(16, 32, 48, .12); }
+
+  .nav .pill {
+    display: inline-block; margin-left: 5px; padding: 0 5px;
+    border-radius: 999px; background: var(--accent-bg); color: var(--accent);
+    font-size: 10.5px; font-weight: 800;
+  }
+
+  .top-right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--muted); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 650;
+    background: #fdf0e6; color: #b4530a; border: 1px solid #f0cba8;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---------- 布局 ---------- */
+  .page { max-width: 1040px; margin: 0 auto; padding: 16px 22px 46px; }
+
+  /* ---------- 赛事列表（可折叠） ---------- */
+  .list { display: flex; flex-direction: column; gap: 9px; }
+
+  .item {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transition: border-color .15s;
+  }
+  .item.open { border-color: #c6dcd6; }
+
+  .item-head {
+    display: flex; align-items: center; gap: 14px;
+    width: 100%; text-align: left;
+    padding: 12px 15px;
+    background: transparent; border: 0; cursor: pointer;
+  }
+  .item-head:hover { background: #fafcff; }
+  .item.open .item-head { background: #f7fbfa; }
+
+  .ih-left { flex: 1 1 auto; min-width: 0; }
+
+  .ih-meta { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+  .ih-meta .no { font-weight: 800; color: var(--accent); font-size: 12px; letter-spacing: .02em; }
+  .ih-meta .st { padding: 0 6px; border-radius: 4px; font-weight: 700; font-size: 10px; }
+  .ih-meta .st.on { background: var(--win-bg); color: var(--win); }
+  .ih-meta .st.off { background: var(--line2); color: var(--muted); }
+  .ih-meta .m-judged { color: var(--accent); font-weight: 700; }
+
+  .ih-teams { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; font-size: 15.5px; font-weight: 650; }
+  .ih-teams i { font-style: normal; font-size: 10.5px; font-weight: 500; color: var(--muted); }
+  .ih-teams em {
+    font-style: normal; margin-left: 4px;
+    font-size: 13.5px; font-weight: 750; color: var(--ink2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ih-sig { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; flex: 0 0 auto; }
+
+  .sig {
+    display: inline-flex; align-items: baseline; gap: 5px;
+    padding: 3px 8px; border-radius: 7px;
+    background: var(--line2);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .sig i { font-style: normal; font-size: 10px; color: var(--muted); }
+  .sig b { font-size: 13px; font-weight: 750; letter-spacing: .04em; }
+  .sig.kelly { background: var(--accent-bg); }
+  .sig.kelly b { color: var(--accent); letter-spacing: .02em; }
+  .sig.kelly.init { background: var(--line2); }
+  .sig.kelly.init b { color: var(--ink2); }
+
+  .chev {
+    flex: 0 0 auto; width: 20px; height: 20px;
+    display: grid; place-items: center;
+    color: var(--muted); font-size: 13px; transition: transform .18s, color .18s;
+  }
+  .item.open .chev { transform: rotate(90deg); color: var(--accent); }
+
+  .item-body { border-top: 1px solid var(--line); padding: 14px 15px 3px; background: #fbfcfd; }
+  .item-body .card { background: #fff; }
+  .item-body .card:last-child { margin-bottom: 11px; }
+
+  /* ---------- 卡片 ---------- */
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--r); box-shadow: var(--shadow);
+    padding: 16px 18px; margin-bottom: 12px;
+  }
+
+  .sec-head { display: flex; align-items: center; gap: 9px; margin-bottom: 13px; }
+  .sec-head h3 { margin: 0; font-size: 14px; letter-spacing: .01em; }
+  .sec-head .sub { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+  .tag { padding: 1px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 700; background: var(--accent-bg); color: var(--accent); }
+
+  /* ---------- 比赛头 ---------- */
+  .eyebrow { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+  .eyebrow .no { font-weight: 800; color: var(--accent); font-size: 12.5px; }
+  .eyebrow .st { padding: 1px 7px; border-radius: 5px; font-weight: 700; font-size: 10.5px; }
+  .st.on { background: var(--win-bg); color: var(--win); }
+  .st.off { background: var(--line2); color: var(--muted); }
+
+  .hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+  .hero-main { flex: 1 1 360px; min-width: 0; }
+  .hero h2 { margin: 6px 0 0; font-size: 23px; letter-spacing: -.01em; }
+  .hero h2 .vs { font-size: 11px; font-weight: 600; color: var(--muted); padding: 0 7px; }
+
+  .score { text-align: right; }
+  .score .n { font-size: 27px; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .score .r { font-size: 11px; color: var(--muted); }
+
+  .jc-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .jc-mini { padding: 8px 10px; background: #f8fafc; border: 1px solid var(--line); border-radius: 9px; }
+  .jc-mini .l { font-size: 11px; color: var(--muted); }
+  .jc-mini .v { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Coral 凯利 ---------- */
+  .kelly-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+  .kelly-cell { padding: 11px 13px; border: 1px solid var(--line); border-radius: 11px; background: #fcfdfe; }
+  .kelly-cell.low { background: #fdf0e6; border-color: #f0cba8; }
+  .kelly-cell .kl { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+
+  .kvline { display: flex; align-items: baseline; gap: 7px; }
+  .kvline span { flex: 0 0 26px; font-size: 10.5px; color: var(--muted); }
+  .kvline b {
+    font-size: 24px; font-weight: 750; line-height: 1.2;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  .kvline.dim b { font-size: 16px; font-weight: 650; color: var(--ink2); }
+  .kelly-cell.low .kvline b { color: #a04a08; }
+
+  .kelly-cell .kd { margin-top: 3px; font-size: 11.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kelly-cell .kg { margin-top: 2px; font-size: 10.5px; color: var(--muted); }
+
+  .chip-low { padding: 0 5px; border-radius: 4px; background: #f6d9bf; color: #8a3f05; font-size: 9.5px; font-weight: 800; }
+
+  .kv-row { display: flex; align-items: baseline; gap: 12px; margin-top: 10px; font-size: 12px; }
+  .kv-row > span { flex: 0 0 92px; color: var(--muted); }
+  .kv-row .nums { display: flex; gap: 18px; font-variant-numeric: tabular-nums; font-weight: 650; }
+
+  .hint { margin: 11px 0 0; padding-top: 9px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--muted); line-height: 1.65; }
+
+  /* ---------- 交战历史 ---------- */
+  .h2h-row {
+    display: grid; grid-template-columns: 74px 46px minmax(0, 1fr) 34px;
+    align-items: center; gap: 10px;
+    padding: 7px 0; border-bottom: 1px solid var(--line2); font-size: 12.5px;
+  }
+  .h2h-row:last-child { border-bottom: 0; }
+  .h2h-row .d { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  .h2h-row .lg { font-size: 10.5px; color: var(--muted); }
+  .h2h-row .t { text-align: right; }
+  .h2h-row .t b { font-variant-numeric: tabular-nums; padding: 0 3px; }
+  .res { display: inline-grid; place-items: center; width: 22px; height: 20px; border-radius: 5px; font-size: 11px; font-weight: 800; }
+  .res.w { background: var(--win-bg); color: var(--win); }
+  .res.d { background: var(--draw-bg); color: var(--draw); }
+  .res.l { background: var(--lose-bg); color: var(--lose); }
+
+  /* ---------- 近5场 ---------- */
+  .recent-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .rc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 7px; border-bottom: 2px solid var(--line); margin-bottom: 4px; }
+  .rc-head b { font-size: 13px; }
+  .rc-head span { font-size: 11px; color: var(--muted); }
+  .r-row { display: grid; grid-template-columns: 44px 26px minmax(0, 1fr) 44px 24px; align-items: center; gap: 7px; padding: 5px 0; font-size: 12px; border-bottom: 1px solid var(--line2); }
+  .r-row:last-child { border-bottom: 0; }
+  .r-row .d { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .r-row .vn { font-size: 10px; color: var(--muted); text-align: center; }
+  .r-row .opp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .r-row .sc { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; }
+
+  /* ---------- 玩法 ---------- */
+  .pool-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
+  .ptab {
+    border: 1px solid var(--line); background: #fff;
+    padding: 5px 13px; border-radius: 8px;
+    font-size: 12px; font-weight: 650; color: var(--muted); cursor: pointer;
+  }
+  .ptab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .big3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .big-cell { padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; text-align: center; background: #fcfdfe; }
+  .big-cell .l { font-size: 11.5px; color: var(--muted); }
+  .big-cell .o { font-size: 23px; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .big-cell .p { font-size: 11.5px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+  .big-cell .dev { margin-top: 4px; font-size: 10.5px; font-weight: 650; }
+
+  .crs-group { margin-bottom: 13px; }
+  .crs-group:last-child { margin-bottom: 0; }
+  .cg-head { font-size: 11.5px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+  .mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 5px; }
+  .mini {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 4px;
+    padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px;
+    background: #fcfdfe; font-size: 12px;
+  }
+  .mini .k { color: var(--muted); font-size: 11px; }
+  .mini .o { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .pool-foot { margin-top: 12px; padding-top: 9px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; }
+
+  /* ---------- 我的判断 ---------- */
+  .picks { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pick {
+    flex: 1 1 110px; padding: 11px 12px;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff;
+    font-size: 13px; font-weight: 650; cursor: pointer; text-align: center;
+    transition: .15s;
+  }
+  .pick:hover { border-color: #c9d6e4; }
+  .pick.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .judge textarea {
+    width: 100%; margin-top: 11px; padding: 9px 11px;
+    border: 1px solid var(--line); border-radius: 9px;
+    font-size: 12.5px; resize: vertical; min-height: 62px; background: #fcfdfe;
+  }
+  .judge textarea:focus { outline: none; border-color: var(--accent); background: #fff; }
+
+  .judge-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+  .btn {
+    height: 33px; padding: 0 15px; border-radius: 8px;
+    border: 1px solid var(--line); background: #fff;
+    font-size: 12.5px; font-weight: 650; cursor: pointer;
+  }
+  .btn:hover { background: #f8fafc; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #0b6a5d; }
+  .btn.danger { color: #b03a2e; border-color: #f0c2bc; }
+  .btn.danger:hover { background: #fff6f5; }
+
+  .saved-note { font-size: 11.5px; color: var(--muted); }
+  .verdict { padding: 2px 8px; border-radius: 5px; font-size: 11.5px; font-weight: 800; }
+  .verdict.ok { background: var(--win-bg); color: var(--win); }
+  .verdict.no { background: var(--lose-bg); color: var(--lose); }
+  .verdict.wait { background: var(--line2); color: var(--muted); }
+
+  /* ---------- 记录页 ---------- */
+  .stats { display: flex; gap: 26px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat { }
+  .stat span { display: block; font-size: 11.5px; color: var(--muted); }
+  .stat b { font-size: 22px; font-variant-numeric: tabular-nums; }
+
+  .jtable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .jtable th { text-align: left; padding: 8px 8px; font-size: 11px; font-weight: 650; color: var(--muted); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .jtable td { padding: 9px 8px; border-bottom: 1px solid var(--line2); vertical-align: top; }
+  .jtable tr:hover td { background: #fafcff; }
+  .jtable .num { font-variant-numeric: tabular-nums; }
+  .jtable .note-cell { color: var(--ink2); max-width: 220px; }
+  .jtable .m { font-weight: 650; }
+
+  .empty-state { padding: 34px 10px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.9; }
+  .empty-state b { color: var(--ink2); }
+
+  .foot { max-width: 1320px; margin: 0 auto; padding: 0 22px 30px; font-size: 11px; color: #93a1b3; line-height: 1.75; }
+
+  .fatal { max-width: 620px; margin: 80px auto; padding: 24px; background: #fff; border: 1px solid var(--line); border-radius: 14px; font-size: 14px; color: var(--ink2); }
+  .fatal b { color: #b03a2e; }
+
+  /* ---------- 半场比分 ---------- */
+  .ht { font-style: normal; font-size: 10px; font-weight: 500; color: var(--muted); margin-left: 5px; }
+  .r-row .sc em { display: block; font-style: normal; font-size: 9.5px; font-weight: 500; color: var(--muted); line-height: 1.3; }
+
+  /* ---------- 「只显示竞彩开售」提示 ---------- */
+  .list-note {
+    display: flex; align-items: flex-start; gap: 7px;
+    margin: 0 2px 11px;
+    font-size: 11.5px; line-height: 1.65; color: var(--muted);
+  }
+  .list-note::before {
+    content: "i";
+    flex: 0 0 15px; height: 15px; margin-top: 1px;
+    display: grid; place-items: center;
+    border-radius: 50%; background: var(--accent-bg); color: var(--accent);
+    font-size: 10px; font-weight: 800;
+  }
+  .list-note b { color: var(--ink2); font-weight: 700; }
+
+  /* ---------- 赛果录入 ---------- */
+  .res-form { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+
+  .res-in {
+    width: 58px; height: 36px; text-align: center;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: #fcfdfe; font-size: 16px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .res-in:focus { outline: none; border-color: var(--accent); background: #fff; }
+  .res-colon { font-size: 16px; font-weight: 700; color: var(--muted); }
+  .res-msg { font-size: 11.5px; color: var(--muted); }
+  .res-msg.ok { color: var(--win); font-weight: 650; }
+  .res-msg.err { color: var(--lose); font-weight: 650; }
+
+  /* ---------- 导出 / 导入 ---------- */
+  .io-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .io-bar .tip { font-size: 11.5px; color: var(--muted); }
+
+  /* ---------- 汇总赛事页（按联赛） ---------- */
+  .leagues { display: flex; flex-direction: column; gap: 7px; }
+
+  .league-row {
+    display: grid; grid-template-columns: 92px minmax(0, 1fr) 58px 18px;
+    align-items: center; gap: 10px;
+    width: 100%; text-align: left; padding: 10px 12px;
+    background: #fcfdfe; border: 1px solid var(--line); border-radius: 10px;
+    cursor: pointer; transition: .14s;
+  }
+  .league-row:hover { border-color: #c9d6e4; background: #f8fbfd; }
+
+  .lg-name { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .lg-dates { display: flex; flex-wrap: wrap; gap: 4px; }
+
+  .dchip {
+    display: inline-flex; align-items: baseline; gap: 3px;
+    padding: 1px 7px; border-radius: 999px;
+    background: #fff; border: 1px solid var(--line);
+    font-size: 10.5px; color: var(--ink2);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .dchip b { color: var(--accent); font-weight: 750; font-size: 10px; }
+
+  .lg-meta { text-align: right; font-size: 11.5px; color: var(--muted); }
+  .lg-meta b { font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* ---------- 指数汇总页 ---------- */
+  .idx-sec { margin-bottom: 17px; }
+  .idx-sec:last-child { margin-bottom: 0; }
+
+  .idx-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    margin-bottom: 7px;
+    font-size: 12px; font-weight: 700; color: var(--ink2);
+  }
+  .idx-head span { font-size: 10.5px; font-weight: 500; color: var(--muted); }
+
+  .idx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .icode {
+    display: inline-flex; align-items: baseline; gap: 5px;
+    padding: 4px 10px; border-radius: 8px;
+    background: #fcfdfe; border: 1px solid var(--line);
+    font-size: 13.5px; font-weight: 700; letter-spacing: .04em;
+    font-variant-numeric: tabular-nums; color: var(--ink2);
+    cursor: pointer; transition: .13s;
+  }
+  .icode:hover { border-color: #c9d6e4; background: #f6fafd; }
+  .icode b { font-size: 10px; font-weight: 700; color: var(--muted); }
+  .icode.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .icode.on b { color: rgba(255, 255, 255, .78); }
+  .icode.dead { opacity: .34; cursor: not-allowed; background: var(--line2); }
+
+  .selbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    margin-bottom: 14px; padding: 8px 12px;
+    background: var(--accent-bg); border: 1px solid #cfe3dd; border-radius: 9px;
+    font-size: 11.5px; color: var(--muted);
+  }
+  .selbar b { color: var(--accent); font-weight: 700; }
+  .selbar .clear {
+    margin-left: auto; padding: 3px 11px;
+    background: #fff; border: 1px solid var(--line); border-radius: 7px;
+    font-size: 11.5px; font-weight: 650; color: var(--ink2); cursor: pointer;
+  }
+  .selbar .clear:hover { border-color: var(--accent); color: var(--accent); }
+
+  .group-label {
+    margin: 18px 0 8px; padding-left: 2px;
+    font-size: 11.5px; font-weight: 700; color: var(--muted); letter-spacing: .05em;
+  }
+  .group-label:first-of-type { margin-top: 4px; }
+  .group-label b { color: var(--ink2); }
+
+  .back {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-bottom: 10px; padding: 5px 12px;
+    background: #fff; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 12px; font-weight: 650; color: var(--ink2); cursor: pointer;
+  }
+  .back:hover { background: #f8fafc; }
+
+  @media (max-width: 900px) {
+    .recent-cols { grid-template-columns: 1fr; gap: 14px; }
+    .top-right { display: none; }
+    .ih-sig { width: 100%; justify-content: flex-start; }
+    .item-head { flex-wrap: wrap; gap: 8px 12px; }
+    .chev { position: absolute; right: 12px; top: 14px; }
+    .item { position: relative; }
+  }
+
+  @media (max-width: 620px) {
+    .page { padding: 12px 12px 36px; }
+    .topbar { padding: 8px 12px; gap: 10px; }
+    .kvline b { font-size: 20px; }
+    .kvline.dim b { font-size: 14px; }
+    .card { padding: 14px 13px; }
+    .kv-row { flex-direction: column; gap: 3px; }
+    .kv-row > span { flex: none; }
+    .ih-teams { font-size: 14.5px; }
+    .sig { padding: 2px 7px; }
+    .sig b { font-size: 12px; }
+    .league-row { grid-template-columns: 68px minmax(0, 1fr) 18px; gap: 8px; }
+    .league-row .lg-meta { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">⚽</div>
+    <b>竞彩工作台</b>
+  </div>
+
+  <nav class="nav">
+    <button type="button" data-page="match" class="active">赛事</button>
+    <button type="button" data-page="summary">汇总赛事</button>
+    <button type="button" data-page="index">指数汇总</button>
+    <button type="button" data-page="journal">我的记录<span class="pill" id="jCount">0</span></button>
+  </nav>
+
+  <div class="top-right">
+    <span class="badge"><span class="dot"></span>样例数据 · 非实时</span>
+    <span id="updatedAt"></span>
+  </div>
+</header>
+
+<div class="page">
+  <div id="pageMatch">
+    <div id="list"></div>
+  </div>
+
+  <div id="pageSummary" style="display: none;"></div>
+
+  <div id="pageIndex" style="display: none;"></div>
+
+  <section id="pageJournal" style="display: none;"></section>
+
+  <div class="foot">
+    本工具只做公开赔率的换算、战绩整理和自用记录，不是投注平台，不提供投注建议，也不保证比赛结果。<br />
+    竞彩赔率以中国体育彩票官方公布为准；欧赔数据归数据提供方所有。仅供个人分析，请勿传播或商用。
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="logic.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var L = window.JCLogic;
+  var DATA = window.JC_DATA;
+
+  if (!L || !DATA || !DATA.matches || !DATA.matches.length) {
+    document.body.innerHTML =
+      '<div class="fatal"><b>没有读到数据文件。</b><br /><br />' +
+      "请确认这三个文件在同一个文件夹、并且没有改名：<br />" +
+      "index.html &nbsp;·&nbsp; data.js &nbsp;·&nbsp; logic.js<br /><br />" +
+      "如果移动过文件，把它们放回同一个文件夹再重新打开。</div>";
+    return;
+  }
+
+  var STORE_KEY = "jc_journal_v1";
+  var ARCHIVE_KEY = "jc_archive_v1";
+  var ARCHIVE_CAP = 400;   // 本地最多留 400 场；有判断记录的永不裁剪
+  var RECENT_DAYS = 7;     // 赛事页只显示最近 7 天的完场
+
+  var POOL_TABS = [
+    ["had", "胜平负"],
+    ["hhad", "让球"],
+    ["crs", "比分"],
+    ["ttg", "总进球"],
+    ["hafu", "半全场"]
+  ];
+
+  var state = {
+    page: "match",
+    id: null,          // 当前展开的比赛；null = 全部折叠
+    league: null,      // 汇总页里选中的联赛；null = 联赛列表
+    // 指数页：每个维度各选一个码，全部满足才算命中
+    indexSel: { had: null, hhad: null, kelly: null, kellyOpen: null },
+    pool: "had",
+    pick: -1,
+    journal: loadJournal(),
+    archive: {},
+    ioMsg: "",
+    storageOk: true
+  };
+
+  /* ---------------- 小工具 ---------------- */
+
+  var TODAY_STR = (DATA.updatedAt || "").slice(0, 10);
+
+  function daysAgo(n) {
+    var p = TODAY_STR.split("-");
+    var d = new Date(+p[0], +p[1] - 1, +p[2]);
+    d.setDate(d.getDate() - n);
+    return d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
+  }
+
+  function $(id) { return document.getElementById(id); }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch];
+    });
+  }
+
+  function pct(v, d) { return (v * 100).toFixed(d === undefined ? 1 : d) + "%"; }
+  function signed(v, d) {
+    var x = v.toFixed(d === undefined ? 3 : d);
+    return (v > 0 ? "+" : "") + x;
+  }
+
+  /* 所有比赛 = 历史库（累积），不是只看当前 data.js */
+  function allMatches() { return L.archiveToList(state.archive); }
+
+  function findMatch(id) {
+    var m = state.archive[id];
+    return m || null;
+  }
+
+  function current() {
+    return findMatch(state.id) || allMatches()[0] || null;
+  }
+
+  function entryFor(matchId) {
+    for (var i = 0; i < state.journal.length; i++) {
+      if (state.journal[i].matchId === matchId) return state.journal[i];
+    }
+    return null;
+  }
+
+  /* ---------------- 记录存取 ---------------- */
+
+  function loadJournal() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        var arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return arr;
+      }
+    } catch (e) {}
+    return [];
+  }
+
+  function saveJournal() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state.journal)); } catch (e) {}
+  }
+
+  function loadArchive() {
+    try {
+      var raw = localStorage.getItem(ARCHIVE_KEY);
+      if (!raw) return {};
+      var obj = JSON.parse(raw);
+      return (obj && obj.matches) || {};
+    } catch (e) { return {}; }
+  }
+
+  function saveArchive() {
+    try {
+      localStorage.setItem(ARCHIVE_KEY, JSON.stringify({ version: 1, matches: state.archive }));
+      return true;
+    } catch (e) {
+      return false;   // 多半是容量满了
+    }
+  }
+
+  /* 每次打开：把 data.js 里的新比赛并进历史库，旧的永远不删 */
+  function syncArchive() {
+    var ids = state.journal.map(function (e) { return e.matchId; });
+    var merged = L.mergeIntoArchive(state.archive, DATA.matches || []);
+    state.archive = L.pruneArchive(merged, ids, ARCHIVE_CAP);
+    state.storageOk = saveArchive();
+  }
+
+  /* ---------------- 赛果 / 备份 ---------------- */
+
+  function saveResult() {
+    var m = current();
+    if (!m) return;
+
+    var hEl = $("resH");
+    var aEl = $("resA");
+    var msg = $("resMsg");
+    var h = parseInt(hEl ? hEl.value : "", 10);
+    var a = parseInt(aEl ? aEl.value : "", 10);
+
+    if (!(h >= 0 && a >= 0 && h <= 20 && a <= 20)) {
+      if (msg) { msg.textContent = "两个比分都要填（0 ~ 20）。"; msg.className = "res-msg err"; }
+      return;
+    }
+
+    var rec = state.archive[m.id] || Object.assign({}, m);
+    rec.result = [h, a];
+    rec.userResult = true;
+    rec.status = "已完场";
+    state.archive[m.id] = rec;
+    saveArchive();
+
+    refreshPage();
+    var msg2 = $("resMsg");
+    if (msg2) {
+      msg2.textContent = "已保存 · 判定：" + L.OUT[L.outcomeIndex(rec.result)];
+      msg2.className = "res-msg ok";
+    }
+  }
+
+  function exportBackup() {
+    var payload = {
+      app: "竞彩工作台",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      journal: state.journal,
+      archive: state.archive
+    };
+    var text = JSON.stringify(payload, null, 1);
+    var name = "竞彩工作台-备份-" + TODAY_STR + ".json";
+
+    try {
+      var blob = new Blob([text], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
+      state.ioMsg = "已导出 " + name;
+    } catch (err) {
+      state.ioMsg = "导出失败，浏览器可能不允许下载。";
+    }
+    renderAll();
+  }
+
+  function importBackup(file) {
+    if (!file) return;
+    var reader = new FileReader();
+
+    reader.onload = function () {
+      try {
+        var obj = JSON.parse(String(reader.result));
+        if (!obj || (!obj.archive && !obj.journal)) throw new Error("bad");
+
+        var before = state.journal.length;
+        state.archive = L.mergeArchiveMaps(state.archive, obj.archive || {});
+        state.journal = L.mergeJournals(state.journal, obj.journal || []);
+        saveArchive();
+        saveJournal();
+
+        state.ioMsg = "导入完成：新增判断 " + (state.journal.length - before) +
+          " 条，历史共 " + Object.keys(state.archive).length + " 场。";
+        renderAll();
+      } catch (err) {
+        state.ioMsg = "导入失败：文件格式不对。";
+        renderAll();
+      }
+    };
+
+    reader.readAsText(file, "utf-8");
+  }
+
+  /* ---------------- 列表 ---------------- */
+
+  /* 盘型码 / 凯利码统一由 logic.js 计算，避免这边和指数页各算一套 */
+  var oddsCode = L.oddsCode;
+  var kellyCode = L.kellyCode;
+
+  function itemHead(m) {
+    var done = m.status === "已完场";
+    var jc = m.jc.had.odds;
+    var hh = m.jc.hhad.odds;
+    var line = m.jc.line;
+    var cm = L.coralMetrics(m);
+    var kelly = cm.kellyLive;
+    var kellyOpen = cm.kellyOpen;
+    var hasEntry = !!entryFor(m.id);
+
+    var jcTitle = "竞彩胜平负 " + jc.map(function (x) { return x.toFixed(2); }).join(" / ");
+    var hhTitle = "竞彩让球(" + (line > 0 ? "+" : "") + line + ") " +
+      hh.map(function (x) { return x.toFixed(2); }).join(" / ");
+    var kTitle = "Coral 即时凯利 " + kelly.map(function (x) { return x.toFixed(3); }).join(" / ");
+    var koTitle = "Coral 初始凯利 " + kellyOpen.map(function (x) { return x.toFixed(3); }).join(" / ");
+
+    return '<button type="button" class="item-head" data-id="' + esc(m.id) + '">' +
+      '<div class="ih-left">' +
+        '<div class="ih-meta">' +
+          '<b class="no">' + esc(m.no) + "</b>" +
+          "<span>" + esc(m.league) + "</span>" +
+          "<span>" + esc(m.kickoff.slice(5)) + "</span>" +
+          '<span class="st ' + (done ? "off" : "on") + '">' + esc(m.status) + "</span>" +
+          (hasEntry ? '<span class="m-judged">已记判断</span>' : "") +
+        "</div>" +
+        '<div class="ih-teams">' + esc(m.home) + " <i>vs</i> " + esc(m.away) +
+          (done && m.result ? "<em>" + m.result[0] + ":" + m.result[1] + "</em>" : "") +
+          (done && m.ht ? '<i class="ht">半' + m.ht[0] + ":" + m.ht[1] + "</i>" : "") +
+        "</div>" +
+      "</div>" +
+      '<div class="ih-sig">' +
+        '<span class="sig" title="' + esc(jcTitle) + '"><i>胜平负</i><b>' + oddsCode(jc) + "</b></span>" +
+        '<span class="sig" title="' + esc(hhTitle) + '"><i>让' + (line > 0 ? "+" : "") + line +
+          "</i><b>" + oddsCode(hh) + "</b></span>" +
+        '<span class="sig kelly" title="' + esc(kTitle) + '"><i>即时凯利</i><b>' + kellyCode(kelly) + "</b></span>" +
+        '<span class="sig kelly init" title="' + esc(koTitle) + '"><i>初始凯利</i><b>' + kellyCode(kellyOpen) + "</b></span>" +
+      "</div>" +
+      '<span class="chev">›</span>' +
+    "</button>";
+  }
+
+  /* 一组比赛的折叠列表 HTML（赛事页和联赛页共用） */
+  function listHtml(list) {
+    return list.map(function (m) {
+      var open = m.id === state.id;
+      return '<article class="item' + (open ? " open" : "") + '">' +
+        itemHead(m) +
+        (open
+          ? '<div class="item-body">' +
+            h2hHtml(m) + recentHtml(m) + coralHtml(m) + poolsHtml(m) + resultHtml(m) + judgeHtml(m) +
+            "</div>"
+          : "") +
+      "</article>";
+    }).join("");
+  }
+
+  function renderList() {
+    var sp = L.splitByStatus(allMatches());
+    var cutoff = daysAgo(RECENT_DAYS);
+    var past = sp.past.filter(function (m) { return m.kickoff.slice(0, 10) >= cutoff; });
+    var hiddenPast = sp.past.length - past.length;
+
+    $("list").innerHTML =
+      '<div class="list-note">只显示<b>竞彩开售</b>的场次（每场都有竞彩编号），不是整个联赛的全部比赛。' +
+        "比如今天意甲有 5 场，竞彩只开了 1 场，这里就只有这 1 场。</div>" +
+      (sp.upcoming.length
+        ? '<div class="group-label">马上要开 · <b>' + sp.upcoming.length + "</b></div>" +
+          '<div class="list">' + listHtml(sp.upcoming) + "</div>"
+        : "") +
+      (past.length
+        ? '<div class="group-label">最近 ' + RECENT_DAYS + ' 天完场 · <b>' + past.length + "</b></div>" +
+          '<div class="list">' + listHtml(past) + "</div>"
+        : "") +
+      (hiddenPast > 0
+        ? '<div class="list-note" style="margin-top:12px">还有 <b>' + hiddenPast +
+          "</b> 场更早的完场没有显示，去「汇总赛事」或「指数汇总」里能查到。</div>"
+        : "");
+  }
+
+  /* ---------------- 详情 ---------------- */
+
+  function resBadge(r) {
+    var cls = r === "胜" ? "w" : (r === "平" ? "d" : "l");
+    return '<span class="res ' + cls + '">' + r + "</span>";
+  }
+
+  function h2hHtml(m) {
+    var s = L.h2hSummary(m);
+
+    var rows = m.h2h.map(function (x) {
+      var homeIsUs = x.home === m.home;
+      var ours = homeIsUs ? x.score[0] : x.score[1];
+      var theirs = homeIsUs ? x.score[1] : x.score[0];
+      var r = ours > theirs ? "胜" : (ours === theirs ? "平" : "负");
+      return '<div class="h2h-row">' +
+        '<span class="d">' + esc(x.date) + "</span>" +
+        '<span class="lg">' + esc(x.league) + "</span>" +
+        '<span class="t">' + esc(x.home) + " <b>" + x.score[0] + ":" + x.score[1] + "</b> " + esc(x.away) +
+          '<i class="ht">半' + x.ht[0] + ":" + x.ht[1] + "</i></span>" +
+        resBadge(r) +
+      "</div>";
+    }).join("");
+
+    return '<div class="card">' +
+      '<div class="sec-head"><h3>交战历史</h3>' +
+        '<span class="sub">近 ' + s.total + " 次 · " + esc(m.home) + " " + s.w + "胜" + s.d + "平" + s.l + "负</span></div>" +
+      rows +
+    "</div>";
+  }
+
+  function recentHtml(m) {
+    function col(team, list) {
+      var s = L.recentSummary(list);
+      var rows = list.map(function (x) {
+        return '<div class="r-row">' +
+          '<span class="d">' + esc(x.date) + "</span>" +
+          '<span class="vn">' + esc(x.venue) + "</span>" +
+          '<span class="opp">' + esc(x.opp) + "</span>" +
+          '<span class="sc">' + x.score[0] + ":" + x.score[1] +
+            "<em>半" + x.ht[0] + ":" + x.ht[1] + "</em></span>" +
+          resBadge(x.result) +
+        "</div>";
+      }).join("");
+
+      return '<div class="recent-col">' +
+        '<div class="rc-head"><b>' + esc(team) + "</b>" +
+          "<span>" + s.w + "胜" + s.d + "平" + s.l + "负 · 进" + s.gf + "失" + s.ga + "</span></div>" +
+        rows +
+      "</div>";
+    }
+
+    return '<div class="card">' +
+      '<div class="sec-head"><h3>近 5 场</h3><span class="sub">主客队各自最近 5 场</span></div>' +
+      '<div class="recent-cols">' +
+        col(m.home, m.recent.home) + col(m.away, m.recent.away) +
+      "</div></div>";
+  }
+
+  function coralHtml(m) {
+    var c = L.coralMetrics(m);
+
+    var cells = L.OUT.map(function (o, j) {
+      var d = c.delta[j];
+      var dcls = Math.abs(d) < 0.002 ? "flat" : (d < 0 ? "fav" : "cold");
+      return '<div class="kelly-cell' + (c.low[j] ? " low" : "") + '">' +
+        '<div class="kl">' + o + (c.low[j] ? '<span class="chip-low">偏保守</span>' : "") + "</div>" +
+        '<div class="kvline"><span>即时</span><b>' + c.kellyLive[j].toFixed(3) + "</b></div>" +
+        '<div class="kvline dim"><span>初始</span><b>' + c.kellyOpen[j].toFixed(3) + "</b></div>" +
+        '<div class="kd ' + dcls + '">' + (Math.abs(d) < 0.002 ? "—" : (d > 0 ? "↑" : "↓") + Math.abs(d).toFixed(3)) +
+          '<span style="font-weight:500;color:var(--muted)"> 即时−初始</span></div>' +
+        '<div class="kg">' + (c.gap[j] >= 0 ? "低于返还率 " : "高于返还率 ") +
+          Math.abs(c.gap[j]).toFixed(3) + "</div>" +
+      "</div>";
+    }).join("");
+
+    var coral = m.coral.live.map(function (o) { return o.toFixed(2); }).join(" / ");
+    var probs = m.marketProb.live.map(function (p) { return pct(p); }).join(" / ");
+
+    return '<div class="card">' +
+      '<div class="sec-head"><h3>Coral 凯利指数</h3><span class="tag">英国</span>' +
+        '<span class="sub">Coral 返还率 ' + pct(c.payout) + "</span></div>" +
+      '<div class="kelly-grid">' + cells + "</div>" +
+      '<div class="kv-row"><span>Coral 赔率</span><div class="nums">' + coral + "</div></div>" +
+      '<div class="kv-row"><span>市场平均概率</span><div class="nums">' + probs + "</div></div>" +
+      '<p class="hint">凯利 = Coral 赔率 × 市场平均概率。每格上面是<b>即时</b>、下面是<b>初始</b>，可以对比盘口怎么走的；' +
+        "第三行是即时减初始（凯利↓ 和赔率↓ 同义，都表示相对更看好）；" +
+        "最后一行是它和 Coral 自己返还率的差距——低得越多，按常见说法是这家公司对这个结果给价越保守。" +
+        "凯利只在胜平负上有意义（Coral 只开 1X2）。</p>" +
+    "</div>";
+  }
+
+  function miniCell(k, odds, prob) {
+    return '<div class="mini" title="' + esc(k) + " 隐含概率 " + pct(prob) + '">' +
+      '<span class="k">' + esc(k) + '</span><span class="o">' + odds.toFixed(2) + "</span></div>";
+  }
+
+  function poolBodyHtml(m) {
+    var pool = state.pool;
+
+    if (pool === "had" || pool === "hhad") {
+      var line = m.jc.line;
+      var odds = pool === "had" ? m.jc.had.odds : m.jc.hhad.odds;
+      var pay = L.payoutRate(odds);
+      var jcP = L.impliedProbs(odds);
+
+      var cells = L.OUT.map(function (o, j) {
+        var dev = (jcP[j] - m.marketProb.live[j]) * 100;
+        var cls = Math.abs(dev) < 0.3 ? "flat" : (dev > 0 ? "fav" : "cold");
+        return '<div class="big-cell">' +
+          '<div class="l">' + o + "</div>" +
+          '<div class="o">' + odds[j].toFixed(2) + "</div>" +
+          '<div class="p">隐含 ' + pct(jcP[j]) + "</div>" +
+          '<div class="dev ' + cls + '">比欧赔 ' + (dev > 0 ? "高 " : "低 ") + Math.abs(dev).toFixed(1) + "</div>" +
+        "</div>";
+      }).join("");
+
+      return '<div class="big3">' + cells + "</div>" +
+        '<div class="pool-foot"><span>' +
+          (pool === "hhad" ? "让球 " + (line > 0 ? "+" : "") + line + "（主队让球数）" : "不让球") +
+        "</span><span>竞彩返还率 " + pct(pay) + "</span></div>";
+    }
+
+    if (pool === "crs") {
+      var c = L.crsMetrics(m.jc.crs.odds);
+      var groups = c.groups.map(function (g) {
+        var cells = g.keys.map(function (k, i) {
+          return miniCell(k, g.odds[i], g.probs[i]);
+        }).join("");
+        return '<div class="crs-group"><div class="cg-head">' + g.label +
+          "（" + g.keys.length + " 项）</div><div class=\"mini-grid\">" + cells + "</div></div>";
+      }).join("");
+
+      return groups +
+        '<div class="pool-foot"><span>共 ' + c.count + ' 项</span>' +
+        "<span>竞彩返还率 " + pct(c.payout) + "</span></div>";
+    }
+
+    if (pool === "ttg") {
+      var t = L.poolMetrics(m.jc.ttg.odds, L.TTG_ORDER);
+      var tc = t.labels.map(function (k, i) {
+        return miniCell(k === "7+" ? "7球+" : k + "球", t.odds[i], t.probs[i]);
+      }).join("");
+      return '<div class="mini-grid">' + tc + "</div>" +
+        '<div class="pool-foot"><span>总进球数</span>' +
+        "<span>竞彩返还率 " + pct(t.payout) + "</span></div>";
+    }
+
+    var h = L.poolMetrics(m.jc.hafu.odds, L.HAFU_ORDER);
+    var hc = h.labels.map(function (k, i) {
+      return miniCell(k.replace("/", "-"), h.odds[i], h.probs[i]);
+    }).join("");
+    return '<div class="mini-grid">' + hc + "</div>" +
+      '<div class="pool-foot"><span>半场-全场</span>' +
+      "<span>竞彩返还率 " + pct(h.payout) + "</span></div>";
+  }
+
+  function poolsHtml(m) {
+    var tabs = POOL_TABS.map(function (t) {
+      return '<button type="button" class="ptab' + (state.pool === t[0] ? " active" : "") +
+        '" data-pool="' + t[0] + '">' + t[1] + "</button>";
+    }).join("");
+
+    return '<div class="card">' +
+      '<div class="sec-head"><h3>竞彩玩法</h3><span class="sub">官方固定奖金</span></div>' +
+      '<div class="pool-tabs">' + tabs + "</div>" +
+      '<div id="poolBody">' + poolBodyHtml(m) + "</div>" +
+    "</div>";
+  }
+
+  /* 赛果：已完场的填比分，判断记录才能判对错 */
+  function resultHtml(m) {
+    var r = m.result || null;
+    var hv = r ? r[0] : "";
+    var av = r ? r[1] : "";
+    var htTxt = m.ht ? "半 " + m.ht[0] + ":" + m.ht[1] : "";
+
+    return '<div class="card">' +
+      '<div class="sec-head"><h3>赛果</h3>' +
+        '<span class="sub">' + (r ? (m.userResult ? "手动录入" : "数据自带") + " · " + htTxt
+                                   : "踢完了就填一下，判断记录才能判对错") + "</span></div>" +
+      '<div class="res-form">' +
+        '<input type="number" min="0" max="20" id="resH" class="res-in" placeholder="主" value="' + hv + '" />' +
+        '<span class="res-colon">:</span>' +
+        '<input type="number" min="0" max="20" id="resA" class="res-in" placeholder="客" value="' + av + '" />' +
+        '<button type="button" class="btn primary" id="saveRes">保存赛果</button>' +
+        '<span class="res-msg" id="resMsg"></span>' +
+      "</div>" +
+      (r ? '<p class="hint">当前判定：' + esc(L.OUT[L.outcomeIndex(r)]) +
+        "。填错了直接改数字再保存即可。</p>" : "") +
+    "</div>";
+  }
+
+  function judgeHtml(m) {
+    var e = entryFor(m.id);
+    var pick = state.pick;
+    var note = e ? e.note : "";
+
+    var picks = L.OUT.map(function (o, j) {
+      return '<button type="button" class="pick' + (pick === j ? " on" : "") +
+        '" data-pick="' + j + '">' + o + "</button>";
+    }).join("");
+
+    var verdict = "";
+    if (e) {
+      var v = L.judge(e, m);
+      verdict = v.settled
+        ? '<span class="verdict ' + (v.correct ? "ok" : "no") + '">' +
+          (v.correct ? "✓ 判断正确" : "✗ 判断错误") + "（实际 " + L.OUT[v.actual] + "）</span>"
+        : '<span class="verdict wait">待赛果</span>';
+    }
+
+    return '<div class="card judge">' +
+      '<div class="sec-head"><h3>我的判断</h3>' +
+        '<span class="sub">' + (e ? "已记录 · " + esc(e.savedAt) : "还没记录") + "</span></div>" +
+      '<div class="picks">' + picks + "</div>" +
+      '<textarea id="jNote" placeholder="为什么这么看？（可以不写，但写下来以后才有得复盘）">' + esc(note) + "</textarea>" +
+      '<div class="judge-actions">' +
+        '<button type="button" class="btn primary" id="saveJudge">保存判断</button>' +
+        (e ? '<button type="button" class="btn danger" id="delJudge">删除本场记录</button>' : "") +
+        verdict +
+        '<span class="saved-note" id="judgeMsg"></span>' +
+      "</div>" +
+      '<p class="hint">记录会存下当时的 Coral 凯利，赛果出来后自动判断对错。攒够之后，「我的记录」里能看到你自己那套经验的真实命中率。</p>' +
+    "</div>";
+  }
+
+  /* ---------------- 记录页 ---------------- */
+
+  function renderJournal() {
+    var settled = 0, correct = 0;
+
+    var rows = state.journal.slice().reverse().map(function (e) {
+      var m = findMatch(e.matchId);
+      var v = L.judge(e, m);
+      if (v.settled) {
+        settled++;
+        if (v.correct) correct++;
+      }
+
+      var kelly = (e.kelly || []).map(function (k, j) {
+        return '<span' + (j === e.pick ? ' style="font-weight:800;color:var(--accent)"' : "") + ">" +
+          Number(k).toFixed(3) + "</span>";
+      }).join(" / ");
+
+      var verdict = v.settled
+        ? '<span class="verdict ' + (v.correct ? "ok" : "no") + '">' + (v.correct ? "对" : "错") + "</span>"
+        : '<span class="verdict wait">待赛果</span>';
+
+      var result = (m && m.result)
+        ? m.result[0] + ":" + m.result[1] + " (" + L.OUT[L.outcomeIndex(m.result)] + ")"
+        : "—";
+
+      return "<tr>" +
+        '<td class="num">' + esc(e.savedAt) + "</td>" +
+        '<td class="m">' + esc(m ? m.no + " " + m.home + " vs " + m.away : e.matchLabel) + "</td>" +
+        "<td><b>" + esc(L.pickLabel(e.pick)) + "</b></td>" +
+        '<td class="num">' + kelly + "</td>" +
+        '<td class="num">' + result + "</td>" +
+        "<td>" + verdict + "</td>" +
+        '<td class="note-cell">' + esc(e.note || "") + "</td>" +
+        '<td><button type="button" class="btn" data-jdel="' + esc(e.matchId) + '">删</button></td>' +
+      "</tr>";
+    }).join("");
+
+    $("pageJournal").innerHTML =
+      '<div class="card">' +
+        '<div class="sec-head"><h3>我的判断记录</h3>' +
+          '<span class="sub">共 ' + state.journal.length + " 条 · 已出结果 " + settled + " 条</span></div>" +
+        '<div class="io-bar">' +
+          '<button type="button" class="btn" id="exportAll">导出备份</button>' +
+          '<label class="btn" for="importFile">导入备份</label>' +
+          '<input type="file" id="importFile" accept=".json,application/json" hidden />' +
+          '<span class="tip">' + esc(state.ioMsg ||
+            "记录和历史都只存在这台设备的浏览器里，清理浏览器数据会丢，建议定期导出。") + "</span>" +
+        "</div>" +
+        (state.storageOk ? "" :
+          '<div class="list-note" style="color:var(--lose)">⚠️ 浏览器本地存储写入失败（可能空间满了），' +
+            "这次的改动可能没保存。先导出备份，再清理一些旧记录。</div>") +
+        (state.journal.length
+          ? '<div class="stats">' +
+              '<div class="stat"><span>记录总数</span><b>' + state.journal.length + "</b></div>" +
+              '<div class="stat"><span>已出结果</span><b>' + settled + "</b></div>" +
+              '<div class="stat"><span>判断正确</span><b>' + correct + "</b></div>" +
+              '<div class="stat"><span>命中率</span><b>' +
+                (settled ? Math.round((correct / settled) * 100) + "%" : "—") + "</b></div>" +
+            "</div>" +
+            '<div style="overflow-x:auto"><table class="jtable">' +
+              "<thead><tr><th>记录时间</th><th>比赛</th><th>我的倾向</th><th>当时Coral凯利</th>" +
+              "<th>赛果</th><th>判定</th><th>备注</th><th></th></tr></thead>" +
+              "<tbody>" + rows + "</tbody></table></div>"
+          : '<div class="empty-state"><b>还没有记录。</b><br />' +
+            "回到「赛事」，选一场比赛，在底部「我的判断」里选个倾向、点保存，就会出现在这里。<br />" +
+            "赛果出来之后，这里会自动算出你判断对了还是错了。</div>") +
+      "</div>";
+  }
+
+  /* ---------------- 事件 ---------------- */
+
+  /* ---------------- 汇总赛事页（按联赛） ---------------- */
+
+  function renderSummary() {
+    var box = $("pageSummary");
+    var all = L.onSaleMatches(allMatches());
+    var leagues = L.leagueSummary(allMatches());
+
+    // 第一层：按联赛汇总，每个联赛显示"哪几期开的、各几场"
+    if (!state.league) {
+      var rows = leagues.map(function (s) {
+        var chips = s.periods.map(function (p) {
+          return '<span class="dchip">' + esc(p.day) + " <b>×" + p.count + "</b></span>";
+        }).join("");
+
+        return '<button type="button" class="league-row" data-league="' + esc(s.name) + '">' +
+          '<span class="lg-name">' + esc(s.name) + "</span>" +
+          '<span class="lg-dates">' + chips + "</span>" +
+          '<span class="lg-meta"><b>' + s.total + "</b> 场</span>" +
+          '<span class="chev">›</span>' +
+        "</button>";
+      }).join("");
+
+      box.innerHTML = '<div class="card">' +
+        '<div class="sec-head"><h3>汇总赛事</h3>' +
+          '<span class="sub">竞彩开售 ' + all.length + " 场 · " + leagues.length + " 个联赛</span></div>" +
+        '<div class="list-note">按联赛看竞彩开过的场次，期号按<b>开售日</b>算（和竞彩官方一致）。' +
+          "点进去是这个联赛每一期的盘口。</div>" +
+        '<div class="leagues">' + rows + "</div>" +
+      "</div>";
+      return;
+    }
+
+    // 第二层：这个联赛的全部场次，按竞彩期号分组
+    var ms = all.filter(function (m) { return m.league === state.league; });
+    var groups = L.groupByPeriod(ms);
+    var live = ms.filter(function (m) { return m.status !== "已完场"; }).length;
+
+    box.innerHTML =
+      '<button type="button" class="back" id="backLeagues">‹ 返回汇总</button>' +
+      '<div class="card" style="margin-bottom:10px">' +
+        '<div class="sec-head" style="margin-bottom:0"><h3>' + esc(state.league) + "</h3>" +
+          '<span class="sub">竞彩开售 ' + ms.length + " 场 · 在售 " + live +
+          " · 完场 " + (ms.length - live) + "</span></div>" +
+      "</div>" +
+      groups.map(function (g) {
+        return '<div class="group-label">' + esc(g.day) + " · " +
+          esc(g.date.slice(5).replace("-", "/")) + ' 开售 · <b>' + g.items.length + "</b></div>" +
+          '<div class="list">' + listHtml(g.items) + "</div>";
+      }).join("");
+  }
+
+  /* ---------------- 指数汇总页（同指数查询） ---------------- */
+
+  var INDEX_LABELS = {
+    had: "胜平负盘型",
+    hhad: "让球盘型",
+    kelly: "即时凯利",
+    kellyOpen: "初始凯利"
+  };
+
+  function renderIndex() {
+    var box = $("pageIndex");
+    var ms = L.onSaleMatches(allMatches());
+    var entries = L.indexEntries(ms);
+    var groups = L.indexGroups(ms);
+    var sel = state.indexSel;
+
+    var selectedList = L.INDEX_DIMS.filter(function (d) { return sel[d]; });
+    var hits = selectedList.length
+      ? L.filterEntries(entries, sel).map(function (e) { return e.match; })
+      : [];
+
+    // 每个维度先去掉自己的条件，得到"其它维度已选"的候选集，
+    // 这样每个码后面的数字就是"再选它还能剩几场"，不会走到死路
+    var baseByDim = {};
+    L.INDEX_DIMS.forEach(function (d) {
+      var s = Object.assign({}, sel);
+      s[d] = null;
+      baseByDim[d] = L.filterEntries(entries, s);
+    });
+
+    var sections = L.INDEX_DIMS.map(function (dim) {
+      var list = groups[dim] || [];
+      if (!list.length) return "";
+
+      var chips = list.map(function (g) {
+        var on = sel[dim] === g.code;
+        // 已选中的码显示"当前一共几场"；没选中的显示"再选它还剩几场"
+        var count = on
+          ? hits.length
+          : baseByDim[dim].filter(function (e) { return e.codes[dim] === g.code; }).length;
+        var dead = count === 0 && !on;
+
+        return '<button type="button" class="icode' + (on ? " on" : "") + (dead ? " dead" : "") +
+          '" data-dim="' + dim + '" data-code="' + esc(g.code) + '"' + (dead ? " disabled" : "") + ">" +
+          esc(g.code) + "<b>" + count + "</b></button>";
+      }).join("");
+
+      return '<div class="idx-sec">' +
+        '<div class="idx-head">' + INDEX_LABELS[dim] +
+          "<span>" + list.length + " 种</span></div>" +
+        '<div class="idx-chips">' + chips + "</div>" +
+      "</div>";
+    }).join("");
+
+    var selBar = "";
+    if (selectedList.length) {
+      selBar = '<div class="selbar">已选：' +
+        selectedList.map(function (d) {
+          return "<b>" + INDEX_LABELS[d] + " " + esc(sel[d]) + "</b>";
+        }).join(" ＋ ") +
+        '<button type="button" class="clear" id="clearIndex">清空</button></div>';
+    }
+
+    var result = "";
+    if (selectedList.length) {
+      result = '<div class="card">' +
+        '<div class="sec-head"><h3>同指数赛事</h3>' +
+          '<span class="sub">' + hits.length + " 场" + (hits.length ? "" : "（没有同时满足的）") + "</span></div>" +
+        (hits.length
+          ? '<div class="list">' + listHtml(hits) + "</div>"
+          : '<div class="empty-state">没有同时满足这些条件的比赛。<br />点上面的「清空」或去掉一个条件再试。</div>') +
+      "</div>";
+    }
+
+    box.innerHTML =
+      '<div class="card">' +
+        '<div class="sec-head"><h3>指数汇总</h3>' +
+          '<span class="sub">' + ms.length + " 场竞彩赛事</span></div>" +
+        '<div class="list-note">点码可以<b>叠加</b>：选了几个条件就要同时满足几个（不同维度各选一个）。' +
+          "每个码后面的数字是「再选它还剩几场」，变灰的表示选了就没了。</div>" +
+        selBar +
+        sections +
+      "</div>" +
+      result;
+  }
+
+  /* 折叠/展开之后，重绘当前所在页面 */
+  function refreshPage() {
+    if (state.page === "summary") renderSummary();
+    else if (state.page === "index") renderIndex();
+    else renderList();
+  }
+
+  function renderAll() {
+    $("pageMatch").style.display = state.page === "match" ? "" : "none";
+    $("pageSummary").style.display = state.page === "summary" ? "" : "none";
+    $("pageIndex").style.display = state.page === "index" ? "" : "none";
+    $("pageJournal").style.display = state.page === "journal" ? "" : "none";
+
+    $("jCount").textContent = state.journal.length;
+
+    if (state.page === "match") renderList();
+    else if (state.page === "summary") renderSummary();
+    else if (state.page === "index") renderIndex();
+    else renderJournal();
+
+    document.querySelectorAll(".nav button").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-page") === state.page);
+    });
+  }
+
+  document.querySelectorAll(".nav button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      state.page = b.getAttribute("data-page");
+      if (state.page === "summary") { state.league = null; }
+      renderAll();
+    });
+  });
+
+  /* 列表点击：赛事页 / 汇总页 / 指数页共用同一套逻辑 */
+  function onListClick(e) {
+    // 0) 返回联赛汇总
+    if (e.target.closest("#backLeagues")) {
+      state.league = null;
+      state.id = null;
+      renderSummary();
+      return;
+    }
+
+    // 0.2) 点指数码 → 叠加/取消一个条件
+    var icode = e.target.closest(".icode");
+    if (icode) {
+      var dim = icode.getAttribute("data-dim");
+      var code = icode.getAttribute("data-code");
+      state.indexSel[dim] = state.indexSel[dim] === code ? null : code;
+      state.id = null;
+      renderIndex();
+      return;
+    }
+
+    // 0.25) 清空所有筛选条件
+    if (e.target.closest("#clearIndex")) {
+      state.indexSel = { had: null, hhad: null, kelly: null, kellyOpen: null };
+      state.id = null;
+      renderIndex();
+      return;
+    }
+
+    // 0.5) 点某个联赛 → 看这个联赛开过的全部场次
+    var lgRow = e.target.closest(".league-row");
+    if (lgRow) {
+      state.league = lgRow.getAttribute("data-league");
+      state.id = null;
+      renderSummary();
+      return;
+    }
+
+    // 1) 点标题行 → 展开 / 收起
+    var head = e.target.closest(".item-head");
+    if (head) {
+      var id = head.getAttribute("data-id");
+      if (state.id === id) {
+        state.id = null;
+      } else {
+        state.id = id;
+        state.pool = "had";
+        var prev = entryFor(id);
+        state.pick = prev ? prev.pick : -1;
+      }
+      refreshPage();
+      return;
+    }
+
+    // 2) 切玩法标签：只重绘玩法区，不碰备注框
+    var tab = e.target.closest(".ptab");
+    if (tab) {
+      state.pool = tab.getAttribute("data-pool");
+      document.querySelectorAll(".ptab").forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-pool") === state.pool);
+      });
+      var body = $("poolBody");
+      if (body) body.innerHTML = poolBodyHtml(current());
+      return;
+    }
+
+    // 3) 选倾向：只切按钮状态，不重绘，否则用户正在输入的备注会被清掉
+    var pick = e.target.closest(".pick");
+    if (pick) {
+      state.pick = parseInt(pick.getAttribute("data-pick"), 10);
+      document.querySelectorAll(".pick").forEach(function (p, i) {
+        p.classList.toggle("on", i === state.pick);
+      });
+      return;
+    }
+
+    if (e.target.closest("#saveRes")) { saveResult(); return; }
+    if (e.target.closest("#saveJudge")) { saveJudgment(); return; }
+    if (e.target.closest("#delJudge")) { deleteJudgment(state.id); return; }
+  }
+
+  $("list").addEventListener("click", onListClick);
+  $("pageSummary").addEventListener("click", onListClick);
+  $("pageIndex").addEventListener("click", onListClick);
+
+  $("pageJournal").addEventListener("click", function (e) {
+    var del = e.target.closest("[data-jdel]");
+    if (del) { deleteJudgment(del.getAttribute("data-jdel")); return; }
+
+    if (e.target.closest("#exportAll")) { exportBackup(); return; }
+  });
+
+  $("pageJournal").addEventListener("change", function (e) {
+    if (e.target && e.target.id === "importFile") {
+      importBackup(e.target.files && e.target.files[0]);
+    }
+  });
+
+  function saveJudgment() {
+    var m = current();
+
+    if (state.pick < 0) {
+      var msg = $("judgeMsg");
+      if (msg) msg.textContent = "先选一个倾向（主胜 / 平 / 客胜）。";
+      return;
+    }
+
+    var noteEl = $("jNote");
+    var note = noteEl ? noteEl.value.trim() : "";
+    var c = L.coralMetrics(m);
+    var now = new Date();
+    var stamp = now.getFullYear() + "-" +
+      String(now.getMonth() + 1).padStart(2, "0") + "-" +
+      String(now.getDate()).padStart(2, "0") + " " +
+      String(now.getHours()).padStart(2, "0") + ":" +
+      String(now.getMinutes()).padStart(2, "0");
+
+    var entry = {
+      matchId: m.id,
+      matchLabel: m.no + " " + m.home + " vs " + m.away,
+      pick: state.pick,
+      note: note,
+      savedAt: stamp,
+      kelly: c.kellyLive.map(function (k) { return Number(k.toFixed(4)); })
+    };
+
+    var idx = -1;
+    for (var i = 0; i < state.journal.length; i++) {
+      if (state.journal[i].matchId === m.id) { idx = i; break; }
+    }
+    if (idx >= 0) state.journal[idx] = entry;
+    else state.journal.push(entry);
+
+    saveJournal();
+    renderAll();
+  }
+
+  function deleteJudgment(matchId) {
+    state.journal = state.journal.filter(function (e) { return e.matchId !== matchId; });
+    if (matchId === state.id) state.pick = -1;
+    saveJournal();
+    renderAll();
+  }
+
+  /* ---------------- 启动 ---------------- */
+
+  $("updatedAt").textContent = "数据时间 " + (DATA.updatedAt || "—");
+  state.archive = loadArchive();   // 先读历史库
+  syncArchive();                   // 再把 data.js 里的新比赛并进去
+  renderAll();
+})();
+</script>
+</body>
+</html>
