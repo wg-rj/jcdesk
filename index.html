@@ -523,7 +523,7 @@
 </div>
 
 <script src="data.js?v=3"></script>
-<script src="logic.js?v=4"></script>
+<script src="logic.js?v=5"></script>
 <script>
 (function () {
   "use strict";
@@ -706,12 +706,71 @@
         state.cloudErr = "";
         state.storageOk = saveArchive();
         renderAll();
+        backfillResults();
       })
       .catch(function (e) {
         state.cloudErr = (e && e.message) || String(e);
         state.cloudOk = false;
         renderAll();
+        backfillResults();
       });
+  }
+
+  /* ---------------- 赛果自动回填 ---------------- */
+
+  /* 找"已经开赛 3 小时以上、但还没有赛果"的比赛，去云端按 ID 查比分。
+     3 小时的余量是为了避免把「进行中」的比分当成终场比分。 */
+  function backfillResults() {
+    if (!API_BASE || typeof fetch !== "function") return;
+
+    var now = Date.now();
+    var ids = [];
+
+    Object.keys(state.archive).forEach(function (k) {
+      var m = state.archive[k];
+      if (!m || m.result) return;
+      if (!m.kickoff) return;
+
+      var t = new Date(String(m.kickoff).replace(/-/g, "/")).getTime();
+      if (!isFinite(t)) return;
+      if (now - t < 3 * 3600 * 1000) return;            // 可能还在踢
+
+      if (m.resultTryAt) {
+        var tried = new Date(String(m.resultTryAt).replace(/-/g, "/")).getTime();
+        if (isFinite(tried) && now - tried < 6 * 3600 * 1000) return;  // 6 小时内查过
+      }
+      ids.push(k);
+    });
+
+    if (!ids.length) return;
+    ids = ids.slice(0, 30);
+
+    var stamp = nowStr();
+    ids.forEach(function (id) {
+      if (state.archive[id]) state.archive[id].resultTryAt = stamp;
+    });
+    saveArchive();
+
+    fetch(API_BASE + "?ids=" + encodeURIComponent(ids.join(",")), { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (out) {
+        var res = (out && out.results) || {};
+        var changed = 0;
+
+        Object.keys(res).forEach(function (id) {
+          var m = state.archive[id];
+          if (!m || !res[id] || !res[id].result) return;
+          m.result = res[id].result;
+          m.status = "已完场";
+          changed++;
+        });
+
+        if (changed) {
+          state.storageOk = saveArchive();
+          renderAll();
+        }
+      })
+      .catch(function () { /* 查不到就算了，不影响使用 */ });
   }
 
   /* ---------------- 赛果 / 备份 ---------------- */
@@ -999,14 +1058,19 @@
 
     var coral = m.coral.live.map(function (o) { return o.toFixed(2); }).join(" / ");
     var probs = m.marketProb.live.map(function (p) { return pct(p); }).join(" / ");
+    var liveAt = m.coralAt ? m.coralAt.slice(5) : "";
+    var openAt = m.coralOpenAt ? m.coralOpenAt.slice(5) : "";
 
     return '<div class="card">' +
       '<div class="sec-head"><h3>Coral 凯利指数</h3><span class="tag">英国</span>' +
-        '<span class="sub">Coral 返还率 ' + pct(c.payout) + "</span></div>" +
+        '<span class="sub">Coral 返还率 ' + pct(c.payout) +
+          (liveAt ? " · 抓取 " + esc(liveAt) : "") + "</span></div>" +
       '<div class="kelly-grid">' + cells + "</div>" +
       '<div class="kv-row"><span>Coral 赔率</span><div class="nums">' + coral + "</div></div>" +
       '<div class="kv-row"><span>市场平均概率</span><div class="nums">' + probs + "</div></div>" +
-      '<p class="hint">凯利 = Coral 赔率 × 市场平均概率。每格上面是<b>即时</b>、下面是<b>初始</b>，可以对比盘口怎么走的；' +
+      '<p class="hint">凯利 = Coral 赔率 × 市场平均概率。每格上面是<b>即时</b>、下面是<b>初始</b>' +
+        (openAt ? "（初始取自 " + esc(openAt) + "）" : "") +
+        "，可以对比盘口怎么走的；" +
         "第三行是即时减初始（凯利↓ 和赔率↓ 同义，都表示相对更看好）；" +
         "最后一行是它和 Coral 自己返还率的差距——低得越多，按常见说法是这家公司对这个结果给价越保守。" +
         "凯利只在胜平负上有意义（Coral 只开 1X2）。</p>" +

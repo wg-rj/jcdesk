@@ -358,6 +358,7 @@
          没有的话就是空值，界面显示"未接入"。 */
       coral: it.coral || null,
       marketProb: it.marketProb || null,
+      coralAt: it.coralAt || null,
       h2h: it.h2h || [],
       recent: it.recent || { home: [], away: [] },
     };
@@ -481,12 +482,23 @@
         /* 「初始凯利」= 第一次看到这份赔率时的值。
            接口只给当前价，没有开盘价，所以把最早抓到的 live 存成 open，
            之后每次合并都保留它，这样才看得出盘口往哪边动。 */
-        if (rec.coral && old.coral && old.coral.open) {
-          rec.coral = { open: old.coral.open, live: rec.coral.live };
+        if (rec.coral) {
+          if (old.coral && old.coral.open) {
+            rec.coral = { open: old.coral.open, live: rec.coral.live };
+            rec.coralOpenAt = old.coralOpenAt || old.coralAt || rec.coralAt;
+          } else {
+            rec.coralOpenAt = rec.coralAt;
+          }
+        } else if (old.coral) {
+          rec.coralAt = old.coralAt;
+          rec.coralOpenAt = old.coralOpenAt;
         }
         if (rec.marketProb && old.marketProb && old.marketProb.open) {
           rec.marketProb = { open: old.marketProb.open, live: rec.marketProb.live };
         }
+      }
+      if (rec.coral && !rec.coralOpenAt) {
+        rec.coralOpenAt = rec.coralAt || "";
       }
       next[m.id] = rec;
     });
