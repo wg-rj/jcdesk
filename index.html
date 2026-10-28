@@ -690,8 +690,10 @@
      其余时候用 ?noodds=1 只取竞彩数据，历史库里的旧凯利会保留。 */
 
   var CORAL_KEY = "jc_coral_at_v1";
+  var REPAIR_KEY = "jc_coral_repair_v1";
   var CORAL_TTL = 12 * 3600 * 1000;
   var CORAL_CLOSE_TTL = 30 * 60 * 1000;
+  var REPAIR_GAP = 6 * 3600 * 1000;
 
   function readCoralAt() {
     try { return localStorage.getItem(CORAL_KEY) || ""; } catch (e) { return ""; }
@@ -699,6 +701,31 @@
 
   function writeCoralAt(s) {
     try { localStorage.setItem(CORAL_KEY, s); } catch (e) {}
+  }
+
+  /* 旧版本有个 bug 会把凯利的抓取时间抹掉，且已写进历史库。
+     发现「在售 + 有凯利 + 没时间戳」就允许修一次，但 6 小时内最多一次，
+     免得反复真拉把额度烧光。 */
+  function needsRepair() {
+    var keys = Object.keys(state.archive);
+    for (var i = 0; i < keys.length; i++) {
+      var m = state.archive[keys[i]];
+      if (m && m.status === "在售" && m.coral && !m.coralAt) return true;
+    }
+    return false;
+  }
+
+  function canRepair() {
+    try {
+      var s = localStorage.getItem(REPAIR_KEY);
+      if (!s) return true;
+      var t = new Date(String(s).replace(/-/g, "/")).getTime();
+      return !isFinite(t) || Date.now() - t > REPAIR_GAP;
+    } catch (e) { return true; }
+  }
+
+  function markRepair() {
+    try { localStorage.setItem(REPAIR_KEY, nowStr()); } catch (e) {}
   }
 
   function nearClose() {
@@ -709,6 +736,8 @@
   }
 
   function needCoral() {
+    if (needsRepair() && canRepair()) return true;
+
     var at = readCoralAt();
     if (!at) return true;                      // 从没拉过
 
@@ -747,7 +776,7 @@
         state.storageOk = saveArchive();
 
         // 这次真的去拉了凯利，记下时刻，后面 12 小时不再拉
-        if (wantCoral) writeCoralAt(nowStr());
+        if (wantCoral) { writeCoralAt(nowStr()); markRepair(); }
 
         renderAll();
         backfillResults();
@@ -1102,7 +1131,7 @@
 
     var coral = m.coral.live.map(function (o) { return o.toFixed(2); }).join(" / ");
     var probs = m.marketProb.live.map(function (p) { return pct(p); }).join(" / ");
-    var liveAt = m.coralAt ? m.coralAt.slice(5) : "";
+    var liveAt = m.coralAt ? m.coralAt.slice(5) : (m.coralOpenAt ? m.coralOpenAt.slice(5) : "");
     var openAt = m.coralOpenAt ? m.coralOpenAt.slice(5) : "";
 
     return '<div class="card">' +
