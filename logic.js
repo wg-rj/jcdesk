@@ -354,8 +354,10 @@
         },
         hafu: { odds: codeMapToLabels(it.hafu, (k) => HAFU_LABEL[k] || null) },
       },
-      coral: null,
-      marketProb: null,
+      /* 云端函数会在这两项里塞 Coral 赔率和市场平均概率；
+         没有的话就是 null，界面显示"未接入"。 */
+      coral: it.coral || null,
+      marketProb: it.marketProb || null,
       h2h: [],
       recent: { home: [], away: [] },
     };
