@@ -486,6 +486,8 @@
           if (old.coral && old.coral.open) {
             rec.coral = { open: old.coral.open, live: rec.coral.live };
             rec.coralOpenAt = old.coralOpenAt || old.coralAt || rec.coralAt;
+            // 这次没拉凯利（?noodds=1）时，沿用旧的抓取时刻，别把时间弄丢
+            rec.coralAt = rec.coralAt || old.coralAt || null;
           } else {
             rec.coralOpenAt = rec.coralAt;
           }
