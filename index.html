@@ -523,7 +523,7 @@
 </div>
 
 <script src="data.js?v=3"></script>
-<script src="logic.js?v=5"></script>
+<script src="logic.js?v=6"></script>
 <script>
 (function () {
   "use strict";
@@ -682,11 +682,51 @@
     return out;
   }
 
+  /* ---------------- Coral 刷新闸门 ----------------
+     凯利数据（The Odds API）是唯一有额度限制的东西，一次刷新 = 联赛数。
+     所以「要不要真的去拉」由手机这边决定，不依赖云端缓存：
+       · 平时：12 小时内只拉一次
+       · 竞彩停售前一小时（周一到周五 21 点、周末 22 点）：半小时一次，抢收盘值
+     其余时候用 ?noodds=1 只取竞彩数据，历史库里的旧凯利会保留。 */
+
+  var CORAL_KEY = "jc_coral_at_v1";
+  var CORAL_TTL = 12 * 3600 * 1000;
+  var CORAL_CLOSE_TTL = 30 * 60 * 1000;
+
+  function readCoralAt() {
+    try { return localStorage.getItem(CORAL_KEY) || ""; } catch (e) { return ""; }
+  }
+
+  function writeCoralAt(s) {
+    try { localStorage.setItem(CORAL_KEY, s); } catch (e) {}
+  }
+
+  function nearClose() {
+    var d = new Date();
+    var wd = d.getDay();                       // 0 = 周日
+    var target = (wd === 0 || wd === 6) ? 22 : 21;
+    return d.getHours() === target;
+  }
+
+  function needCoral() {
+    var at = readCoralAt();
+    if (!at) return true;                      // 从没拉过
+
+    var t = new Date(String(at).replace(/-/g, "/")).getTime();
+    if (!isFinite(t)) return true;
+
+    var limit = nearClose() ? CORAL_CLOSE_TTL : CORAL_TTL;
+    return Date.now() - t > limit;
+  }
+
   /* 去云端取最新竞彩数据 */
   function refreshFromCloud() {
     if (!API_BASE || typeof fetch !== "function") return;
 
-    fetch(API_BASE + "?t=" + Date.now(), { cache: "no-store" })
+    var wantCoral = needCoral();
+    var url = API_BASE + "?t=" + Date.now() + (wantCoral ? "" : "&noodds=1");
+
+    fetch(url, { cache: "no-store" })
       .then(function (r) {
         if (!r.ok) throw new Error("接口返回 " + r.status);
         return r.json();
@@ -705,6 +745,10 @@
         state.cloudOk = true;
         state.cloudErr = "";
         state.storageOk = saveArchive();
+
+        // 这次真的去拉了凯利，记下时刻，后面 12 小时不再拉
+        if (wantCoral) writeCoralAt(nowStr());
+
         renderAll();
         backfillResults();
       })
