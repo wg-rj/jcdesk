@@ -477,6 +477,16 @@
           rec.coral = old.coral;
           rec.marketProb = old.marketProb;
         }
+
+        /* 「初始凯利」= 第一次看到这份赔率时的值。
+           接口只给当前价，没有开盘价，所以把最早抓到的 live 存成 open，
+           之后每次合并都保留它，这样才看得出盘口往哪边动。 */
+        if (rec.coral && old.coral && old.coral.open) {
+          rec.coral = { open: old.coral.open, live: rec.coral.live };
+        }
+        if (rec.marketProb && old.marketProb && old.marketProb.open) {
+          rec.marketProb = { open: old.marketProb.open, live: rec.marketProb.live };
+        }
       }
       next[m.id] = rec;
     });
