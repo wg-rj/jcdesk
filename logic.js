@@ -502,6 +502,28 @@
       if (rec.coral && !rec.coralOpenAt) {
         rec.coralOpenAt = rec.coralAt || "";
       }
+
+      /* 变化时间表：每次抓到凯利，如果和上一条不一样，就追加一行。
+         这样卡片上能列出「几点 → 什么值」，而不只是首尾两个点。
+         最多留 20 条，够看一阵子的走势。 */
+      if (rec.coral && rec.marketProb) {
+        const now = kellyIndex(rec.coral.live, rec.marketProb.live);
+        const at = rec.coralAt || "";
+        let series = (old && old.coralSeries) ? old.coralSeries.slice() : [];
+
+        if (at) {
+          const last = series[series.length - 1];
+          const moved = !last || last.k.some((v, j) => Math.abs(v - now[j]) >= 0.001);
+
+          if (moved) {
+            if (last && last.at === at) series[series.length - 1] = { at: at, k: now };
+            else series.push({ at: at, k: now });
+            if (series.length > 20) series = series.slice(-20);
+          }
+        }
+        rec.coralSeries = series;
+      }
+
       next[m.id] = rec;
     });
     return next;
