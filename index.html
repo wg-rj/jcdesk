@@ -87,6 +87,12 @@
   }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
+  .badge.live { background: var(--win-bg); color: var(--win); border-color: #bfe3d0; }
+
+  .sig.kelly.off { background: var(--line2); }
+  .sig.kelly.off b { color: var(--muted); }
+  .sig.kelly.off i { color: #a9b6c4; }
+
   /* ---------- 布局 ---------- */
   .page { max-width: 1040px; margin: 0 auto; padding: 16px 22px 46px; }
 
@@ -494,7 +500,7 @@
   </nav>
 
   <div class="top-right">
-    <span class="badge"><span class="dot"></span>样例数据 · 非实时</span>
+    <span class="badge" id="badge"><span class="dot"></span>样例数据 · 非实时</span>
     <span id="updatedAt"></span>
   </div>
 </header>
@@ -539,6 +545,10 @@
   var ARCHIVE_CAP = 400;   // 本地最多留 400 场；有判断记录的永不裁剪
   var RECENT_DAYS = 7;     // 赛事页只显示最近 7 天的完场
 
+  /* 云端函数地址：阿里云函数计算，用国内 IP 去取竞彩数据。
+     留空 = 只用本地 data.js（离线也能用）。 */
+  var API_BASE = "https://jcdata-pxigzkgjcb.cn-hangzhou.fcapp.run";
+
   var POOL_TABS = [
     ["had", "胜平负"],
     ["hhad", "让球"],
@@ -558,20 +568,31 @@
     journal: loadJournal(),
     archive: {},
     ioMsg: "",
-    storageOk: true
+    storageOk: true,
+    cloudOk: false,      // 云端数据是否取到了
+    cloudErr: "",        // 取失败的原因
+    dataTime: (DATA.updatedAt || "")
   };
 
   /* ---------------- 小工具 ---------------- */
 
   var TODAY_STR = (DATA.updatedAt || "").slice(0, 10);
 
+  function pad2(n) { return String(n).padStart(2, "0"); }
+
+  function fmtTime(d) {
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) +
+      " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  }
+
+  /* 现在的本地时间，"YYYY-MM-DD HH:MM"，和 kickoff 格式一致，可以直接比大小 */
+  function nowStr() { return fmtTime(new Date()); }
+
   function daysAgo(n) {
     var p = TODAY_STR.split("-");
     var d = new Date(+p[0], +p[1] - 1, +p[2]);
     d.setDate(d.getDate() - n);
-    return d.getFullYear() + "-" +
-      String(d.getMonth() + 1).padStart(2, "0") + "-" +
-      String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
   }
 
   function $(id) { return document.getElementById(id); }
@@ -648,6 +669,49 @@
     var merged = L.mergeIntoArchive(state.archive, DATA.matches || []);
     state.archive = L.pruneArchive(merged, ids, ARCHIVE_CAP);
     state.storageOk = saveArchive();
+  }
+
+  /* 样例数据的 id 是 m01、m02 这种；真实竞彩的 id 是数字 matchId。
+     一旦拿到真实数据，就把样例数据从历史库里清掉，免得混在一起。 */
+  function dropSample(archive) {
+    var out = {};
+    Object.keys(archive).forEach(function (k) {
+      if (/^m\d{2,}$/.test(k)) return;
+      out[k] = archive[k];
+    });
+    return out;
+  }
+
+  /* 去云端取最新竞彩数据 */
+  function refreshFromCloud() {
+    if (!API_BASE || typeof fetch !== "function") return;
+
+    fetch(API_BASE + "?t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("接口返回 " + r.status);
+        return r.json();
+      })
+      .then(function (raw) {
+        var ms = L.parseSporttery(raw);
+        if (!ms.length) throw new Error("没解析到比赛（接口可能改版了）");
+
+        var ids = state.journal.map(function (e) { return e.matchId; });
+        state.archive = dropSample(state.archive);
+        state.archive = L.mergeIntoArchive(state.archive, ms);
+        state.archive = L.pruneArchive(state.archive, ids, ARCHIVE_CAP);
+
+        var up = (raw.value && raw.value.lastUpdateTime) || "";
+        state.dataTime = up || fmtTime(new Date());
+        state.cloudOk = true;
+        state.cloudErr = "";
+        state.storageOk = saveArchive();
+        renderAll();
+      })
+      .catch(function (e) {
+        state.cloudErr = (e && e.message) || String(e);
+        state.cloudOk = false;
+        renderAll();
+      });
   }
 
   /* ---------------- 赛果 / 备份 ---------------- */
@@ -746,18 +810,29 @@
   function itemHead(m) {
     var done = m.status === "已完场";
     var jc = m.jc.had.odds;
-    var hh = m.jc.hhad.odds;
-    var line = m.jc.line;
-    var cm = L.coralMetrics(m);
-    var kelly = cm.kellyLive;
-    var kellyOpen = cm.kellyOpen;
+    var hh = (m.jc.hhad && m.jc.hhad.odds) || jc;
+    var line = m.jc.line || 0;
+    var codes = L.matchCodes(m);
+    var hasCoral = !!(m.coral && m.marketProb);
+    var cm = hasCoral ? L.coralMetrics(m) : null;
     var hasEntry = !!entryFor(m.id);
 
     var jcTitle = "竞彩胜平负 " + jc.map(function (x) { return x.toFixed(2); }).join(" / ");
     var hhTitle = "竞彩让球(" + (line > 0 ? "+" : "") + line + ") " +
       hh.map(function (x) { return x.toFixed(2); }).join(" / ");
-    var kTitle = "Coral 即时凯利 " + kelly.map(function (x) { return x.toFixed(3); }).join(" / ");
-    var koTitle = "Coral 初始凯利 " + kellyOpen.map(function (x) { return x.toFixed(3); }).join(" / ");
+    var kTitle = cm
+      ? "Coral 即时凯利 " + cm.kellyLive.map(function (x) { return x.toFixed(3); }).join(" / ")
+      : "暂无 Coral 数据";
+    var koTitle = cm
+      ? "Coral 初始凯利 " + cm.kellyOpen.map(function (x) { return x.toFixed(3); }).join(" / ")
+      : "暂无 Coral 数据";
+
+    function kellySpan(label, code, title) {
+      if (!code) {
+        return '<span class="sig kelly off" title="' + esc(title) + '"><i>' + label + "</i><b>—</b></span>";
+      }
+      return '<span class="sig kelly" title="' + esc(title) + '"><i>' + label + "</i><b>" + code + "</b></span>";
+    }
 
     return '<button type="button" class="item-head" data-id="' + esc(m.id) + '">' +
       '<div class="ih-left">' +
@@ -774,11 +849,11 @@
         "</div>" +
       "</div>" +
       '<div class="ih-sig">' +
-        '<span class="sig" title="' + esc(jcTitle) + '"><i>胜平负</i><b>' + oddsCode(jc) + "</b></span>" +
+        '<span class="sig" title="' + esc(jcTitle) + '"><i>胜平负</i><b>' + (codes.had || "—") + "</b></span>" +
         '<span class="sig" title="' + esc(hhTitle) + '"><i>让' + (line > 0 ? "+" : "") + line +
-          "</i><b>" + oddsCode(hh) + "</b></span>" +
-        '<span class="sig kelly" title="' + esc(kTitle) + '"><i>即时凯利</i><b>' + kellyCode(kelly) + "</b></span>" +
-        '<span class="sig kelly init" title="' + esc(koTitle) + '"><i>初始凯利</i><b>' + kellyCode(kellyOpen) + "</b></span>" +
+          "</i><b>" + (codes.hhad || "—") + "</b></span>" +
+        kellySpan("即时凯利", codes.kelly, kTitle) +
+        kellySpan("初始凯利", codes.kellyOpen, koTitle) +
       "</div>" +
       '<span class="chev">›</span>' +
     "</button>";
@@ -829,7 +904,19 @@
     return '<span class="res ' + cls + '">' + r + "</span>";
   }
 
+  /* 通用：某个模块暂时没有数据 */
+  function missingCard(title, note) {
+    return '<div class="card"><div class="sec-head"><h3>' + title + "</h3>" +
+      '<span class="sub">未接入</span></div>' +
+      '<div class="empty-state" style="padding:18px 8px">' + note + "</div></div>";
+  }
+
   function h2hHtml(m) {
+    if (!m.h2h || !m.h2h.length) {
+      return missingCard("交战历史",
+        "竞彩官方接口不提供这个数据。<br />需要再接一个足球数据源才能显示。");
+    }
+
     var s = L.h2hSummary(m);
 
     var rows = m.h2h.map(function (x) {
@@ -841,7 +928,7 @@
         '<span class="d">' + esc(x.date) + "</span>" +
         '<span class="lg">' + esc(x.league) + "</span>" +
         '<span class="t">' + esc(x.home) + " <b>" + x.score[0] + ":" + x.score[1] + "</b> " + esc(x.away) +
-          '<i class="ht">半' + x.ht[0] + ":" + x.ht[1] + "</i></span>" +
+          (x.ht ? '<i class="ht">半' + x.ht[0] + ":" + x.ht[1] + "</i>" : "") + "</span>" +
         resBadge(r) +
       "</div>";
     }).join("");
@@ -854,6 +941,13 @@
   }
 
   function recentHtml(m) {
+    var home = (m.recent && m.recent.home) || [];
+    var away = (m.recent && m.recent.away) || [];
+    if (!home.length && !away.length) {
+      return missingCard("近 5 场",
+        "竞彩官方接口不提供这个数据。<br />需要再接一个足球数据源才能显示。");
+    }
+
     function col(team, list) {
       var s = L.recentSummary(list);
       var rows = list.map(function (x) {
@@ -862,7 +956,7 @@
           '<span class="vn">' + esc(x.venue) + "</span>" +
           '<span class="opp">' + esc(x.opp) + "</span>" +
           '<span class="sc">' + x.score[0] + ":" + x.score[1] +
-            "<em>半" + x.ht[0] + ":" + x.ht[1] + "</em></span>" +
+            (x.ht ? "<em>半" + x.ht[0] + ":" + x.ht[1] + "</em>" : "") + "</span>" +
           resBadge(x.result) +
         "</div>";
       }).join("");
@@ -877,11 +971,16 @@
     return '<div class="card">' +
       '<div class="sec-head"><h3>近 5 场</h3><span class="sub">主客队各自最近 5 场</span></div>' +
       '<div class="recent-cols">' +
-        col(m.home, m.recent.home) + col(m.away, m.recent.away) +
+        col(m.home, home) + col(m.away, away) +
       "</div></div>";
   }
 
   function coralHtml(m) {
+    if (!m.coral || !m.marketProb) {
+      return missingCard("Coral 凯利指数",
+        "还没有接入 Coral 赔率。<br />凯利需要「Coral 赔率 × 市场平均概率」，得在云端函数里再加一段，并配一个 The Odds API 的 key。");
+    }
+
     var c = L.coralMetrics(m);
 
     var cells = L.OUT.map(function (o, j) {
@@ -915,27 +1014,35 @@
   }
 
   function miniCell(k, odds, prob) {
+    if (typeof odds !== "number" || !isFinite(odds)) {
+      return '<div class="mini"><span class="k">' + esc(k) + '</span><span class="o">—</span></div>';
+    }
     return '<div class="mini" title="' + esc(k) + " 隐含概率 " + pct(prob) + '">' +
       '<span class="k">' + esc(k) + '</span><span class="o">' + odds.toFixed(2) + "</span></div>";
   }
 
   function poolBodyHtml(m) {
     var pool = state.pool;
+    var hasMkt = !!(m.marketProb && m.marketProb.live);
 
     if (pool === "had" || pool === "hhad") {
-      var line = m.jc.line;
-      var odds = pool === "had" ? m.jc.had.odds : m.jc.hhad.odds;
+      var line = m.jc.line || 0;
+      var odds = (pool === "had" ? m.jc.had : (m.jc.hhad || m.jc.had)).odds;
+      if (!odds || odds.length !== 3) return '<div class="empty">这个玩法暂时没有赔率。</div>';
+
       var pay = L.payoutRate(odds);
       var jcP = L.impliedProbs(odds);
 
       var cells = L.OUT.map(function (o, j) {
-        var dev = (jcP[j] - m.marketProb.live[j]) * 100;
-        var cls = Math.abs(dev) < 0.3 ? "flat" : (dev > 0 ? "fav" : "cold");
+        var dev = hasMkt ? (jcP[j] - m.marketProb.live[j]) * 100 : null;
+        var cls = dev === null ? "flat" : (Math.abs(dev) < 0.3 ? "flat" : (dev > 0 ? "fav" : "cold"));
         return '<div class="big-cell">' +
           '<div class="l">' + o + "</div>" +
           '<div class="o">' + odds[j].toFixed(2) + "</div>" +
           '<div class="p">隐含 ' + pct(jcP[j]) + "</div>" +
-          '<div class="dev ' + cls + '">比欧赔 ' + (dev > 0 ? "高 " : "低 ") + Math.abs(dev).toFixed(1) + "</div>" +
+          (dev === null
+            ? '<div class="dev flat">欧赔未接入</div>'
+            : '<div class="dev ' + cls + '">比欧赔 ' + (dev > 0 ? "高 " : "低 ") + Math.abs(dev).toFixed(1) + "</div>") +
         "</div>";
       }).join("");
 
@@ -946,7 +1053,10 @@
     }
 
     if (pool === "crs") {
-      var c = L.crsMetrics(m.jc.crs.odds);
+      var crsOdds = (m.jc.crs && m.jc.crs.odds) || {};
+      if (!Object.keys(crsOdds).length) return '<div class="empty">这个玩法暂时没有赔率。</div>';
+
+      var c = L.crsMetrics(crsOdds);
       var groups = c.groups.map(function (g) {
         var cells = g.keys.map(function (k, i) {
           return miniCell(k, g.odds[i], g.probs[i]);
@@ -961,7 +1071,9 @@
     }
 
     if (pool === "ttg") {
-      var t = L.poolMetrics(m.jc.ttg.odds, L.TTG_ORDER);
+      var ttgOdds = (m.jc.ttg && m.jc.ttg.odds) || {};
+      if (!Object.keys(ttgOdds).length) return '<div class="empty">这个玩法暂时没有赔率。</div>';
+      var t = L.poolMetrics(ttgOdds, L.TTG_ORDER);
       var tc = t.labels.map(function (k, i) {
         return miniCell(k === "7+" ? "7球+" : k + "球", t.odds[i], t.probs[i]);
       }).join("");
@@ -970,7 +1082,9 @@
         "<span>竞彩返还率 " + pct(t.payout) + "</span></div>";
     }
 
-    var h = L.poolMetrics(m.jc.hafu.odds, L.HAFU_ORDER);
+    var hafuOdds = (m.jc.hafu && m.jc.hafu.odds) || {};
+    if (!Object.keys(hafuOdds).length) return '<div class="empty">这个玩法暂时没有赔率。</div>';
+    var h = L.poolMetrics(hafuOdds, L.HAFU_ORDER);
     var hc = h.labels.map(function (k, i) {
       return miniCell(k.replace("/", "-"), h.odds[i], h.probs[i]);
     }).join("");
@@ -995,6 +1109,10 @@
   /* 赛果：已完场的填比分，判断记录才能判对错 */
   function resultHtml(m) {
     var r = m.result || null;
+
+    // 还没开赛、也没有赛果，就不显示录入框（免得满屏噪音）
+    if (!r && m.kickoff > nowStr()) return "";
+
     var hv = r ? r[0] : "";
     var av = r ? r[1] : "";
     var htTxt = m.ht ? "半 " + m.ht[0] + ":" + m.ht[1] : "";
@@ -1273,6 +1391,15 @@
 
     $("jCount").textContent = state.journal.length;
 
+    var badge = $("badge");
+    if (badge) {
+      badge.innerHTML = '<span class="dot"></span>' +
+        (state.cloudOk ? "实时 · 竞彩官方" : "样例数据 · 非实时");
+      badge.className = "badge" + (state.cloudOk ? " live" : "");
+    }
+    $("updatedAt").textContent = "数据时间 " + (state.dataTime || "—") +
+      (state.cloudErr ? "（云端失败：" + state.cloudErr + "）" : "");
+
     if (state.page === "match") renderList();
     else if (state.page === "summary") renderSummary();
     else if (state.page === "index") renderIndex();
@@ -1437,10 +1564,10 @@
 
   /* ---------------- 启动 ---------------- */
 
-  $("updatedAt").textContent = "数据时间 " + (DATA.updatedAt || "—");
   state.archive = loadArchive();   // 先读历史库
   syncArchive();                   // 再把 data.js 里的新比赛并进去
-  renderAll();
+  renderAll();                     // 先用手头的数据立刻显示
+  refreshFromCloud();              // 再去云端取最新的（异步，失败不影响已显示的内容）
 })();
 </script>
 </body>

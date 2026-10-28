@@ -36,9 +36,11 @@
 
   const sum = (a) => a.reduce((x, y) => x + y, 0);
 
-  /* 返还率 = 1 / Σ(1/赔率) */
+  /* 返还率 = 1 / Σ(1/赔率)。缺项（undefined/NaN）自动忽略，避免算出 NaN。 */
   function payoutRate(odds) {
-    return 1 / sum(odds.map((o) => 1 / o));
+    const valid = odds.filter((o) => typeof o === 'number' && isFinite(o) && o > 1);
+    if (!valid.length) return 0;
+    return 1 / sum(valid.map((o) => 1 / o));
   }
 
   /* 归一化隐含概率（三项加起来 100%） */
@@ -269,6 +271,109 @@
       });
   }
 
+  /* ---------------- 竞彩官方数据 → 内部模型 ---------------- */
+
+  const HAFU_LABEL = {
+    hh: '胜/胜', hd: '胜/平', ha: '胜/负',
+    dh: '平/胜', dd: '平/平', da: '平/负',
+    ah: '负/胜', ad: '负/平', aa: '负/负',
+  };
+
+  const CRS_LABEL = { s1sh: '胜其它', s1sd: '平其它', s1sa: '负其它' };
+
+  function crsLabelOf(code) {
+    if (CRS_LABEL[code]) return CRS_LABEL[code];
+    const m = /^s(\d{2})s(\d{2})$/.exec(code);
+    return m ? Number(m[1]) + ':' + Number(m[2]) : null;
+  }
+
+  function toNum(v) {
+    const n = parseFloat(v);
+    return isFinite(n) && n > 1 ? n : null;
+  }
+
+  /* {"h":"1.57","d":"3.98","a":"4.15"} → [1.57, 3.98, 4.15]，缺一个就返回 null */
+  function threeWay(o) {
+    if (!o) return null;
+    const arr = [toNum(o.h), toNum(o.d), toNum(o.a)];
+    return arr.some((x) => x === null) ? null : arr;
+  }
+
+  /* 把 crs/ttg/hafu 的"码 → 赔率"转成"标签 → 赔率" */
+  function codeMapToLabels(src, mapper) {
+    const out = {};
+    if (!src) return out;
+    Object.keys(src).forEach((k) => {
+      if (k.slice(-1) === 'f') return;        // 带 f 的是涨跌标记，不是赔率
+      const label = mapper(k);
+      const v = toNum(src[k]);
+      if (label && v !== null) out[label] = v;
+    });
+    return out;
+  }
+
+  /* 单场竞彩比赛 → 内部模型。
+     这个接口只给赛程和赔率，没有比分、没有交战历史、没有 Coral。
+     缺的字段一律留空，界面会显示"未接入"。 */
+  function parseSportteryMatch(it) {
+    if (!it || !it.matchId) return null;
+
+    const had = threeWay(it.had);
+    if (!had) return null;                    // 没开盘的跳过
+
+    const hhad = threeWay(it.hhad);
+    const lineRaw = parseFloat(it.hhad && it.hhad.goalLineValue);
+    const line = isFinite(lineRaw) ? lineRaw : 0;
+
+    const time = (it.matchTime || '00:00').slice(0, 5);
+    const date = it.matchDate || it.businessDate || '';
+    const ended = /end|finish|result|完/i.test(it.matchStatus || '');
+
+    return {
+      id: String(it.matchId),
+      no: it.matchNumStr || '',
+      businessDate: it.businessDate || date,
+      league: it.leagueAbbName || '',
+      home: it.homeTeamAbbName || '',
+      away: it.awayTeamAbbName || '',
+      kickoff: date + ' ' + time,
+      status: ended ? '已完场' : '在售',
+      result: null,
+      ht: null,
+      src: 'jc',
+      jc: {
+        line: line,
+        had: { odds: had, payout: payoutRate(had) },
+        hhad: hhad
+          ? { odds: hhad, payout: payoutRate(hhad) }
+          : { odds: had, payout: payoutRate(had) },
+        crs: { odds: codeMapToLabels(it.crs, crsLabelOf) },
+        ttg: {
+          odds: codeMapToLabels(it.ttg, (k) =>
+            /^s[0-7]$/.test(k) ? (k === 's7' ? '7+' : k.slice(1)) : null),
+        },
+        hafu: { odds: codeMapToLabels(it.hafu, (k) => HAFU_LABEL[k] || null) },
+      },
+      coral: null,
+      marketProb: null,
+      h2h: [],
+      recent: { home: [], away: [] },
+    };
+  }
+
+  /* 整个接口响应 → 比赛数组 */
+  function parseSporttery(raw) {
+    const groups = (raw && raw.value && raw.value.matchInfoList) || [];
+    const out = [];
+    groups.forEach((g) => {
+      (g.subMatchList || []).forEach((it) => {
+        const m = parseSportteryMatch(it);
+        if (m) out.push(m);
+      });
+    });
+    return out;
+  }
+
   /* ---------------- 指数码（盘型码 / 凯利码） ---------------- */
 
   /* 赔率 → 盘型码：每个赔率取整数位拼成三位。
@@ -286,14 +391,17 @@
     return kelly.map((k) => String(Math.round(k * 100)).padStart(2, '0')).join('/');
   }
 
-  /* 一场比赛的四组码 */
+  /* 一场比赛的四组码。没有 Coral 数据时，凯利两项返回 null，
+     界面和统计都要能跳过它们（真实竞彩数据暂时没有 Coral）。 */
   function matchCodes(m) {
-    const c = coralMetrics(m);
+    const hasCoral = !!(m && m.coral && m.marketProb);
+    const c = hasCoral ? coralMetrics(m) : null;
+    const jc = (m && m.jc) || {};
     return {
-      had: oddsCode(m.jc.had.odds),
-      hhad: oddsCode(m.jc.hhad.odds),
-      kelly: kellyCode(c.kellyLive),
-      kellyOpen: kellyCode(c.kellyOpen),
+      had: jc.had && jc.had.odds ? oddsCode(jc.had.odds) : null,
+      hhad: jc.hhad && jc.hhad.odds ? oddsCode(jc.hhad.odds) : null,
+      kelly: c ? kellyCode(c.kellyLive) : null,
+      kellyOpen: c ? kellyCode(c.kellyOpen) : null,
     };
   }
 
@@ -307,6 +415,7 @@
     matches.forEach((m) => {
       const c = matchCodes(m);
       INDEX_DIMS.forEach((d) => {
+        if (c[d] === null) return;            // 这项没有数据就跳过
         acc[d][c[d]] = (acc[d][c[d]] || 0) + 1;
       });
     });
@@ -337,6 +446,7 @@
 
   /* 把新抓到的比赛并进历史库。
      - 已有记录：保留用户自己填的赛果（userResult）
+     - 新数据缺的战绩/欧赔，沿用旧记录里的（竞彩接口不给这些）
      - 新记录：直接加入
      - 不删除任何旧记录（除非 prune 裁剪） */
   function mergeIntoArchive(archive, incoming) {
@@ -353,6 +463,17 @@
         } else if (!rec.result && old.result) {
           rec.result = old.result;
           rec.ht = old.ht || null;
+        }
+
+        // 竞彩接口没有交战历史 / 近 5 场 / Coral，别把旧的冲掉
+        if ((!rec.h2h || !rec.h2h.length) && old.h2h && old.h2h.length) rec.h2h = old.h2h;
+        if ((!rec.recent || !((rec.recent.home || []).length)) &&
+            old.recent && ((old.recent.home || []).length || (old.recent.away || []).length)) {
+          rec.recent = old.recent;
+        }
+        if (!rec.coral && old.coral) {
+          rec.coral = old.coral;
+          rec.marketProb = old.marketProb;
         }
       }
       next[m.id] = rec;
@@ -463,5 +584,7 @@
     archiveToList,
     mergeArchiveMaps,
     mergeJournals,
+    parseSporttery,
+    parseSportteryMatch,
   };
 });
