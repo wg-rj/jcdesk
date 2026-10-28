@@ -1,0 +1,9 @@
+name: check
+on: workflow_dispatch
+jobs:
+  c:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -s -m 25 -w "HTTP_CODE=%{http_code}\n" -o r.json -H "Referer: https://m.sporttery.cn/" "https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=had&channel=c" || true
+          head -c 300 r.json || true
