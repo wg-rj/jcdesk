@@ -354,12 +354,12 @@
         },
         hafu: { odds: codeMapToLabels(it.hafu, (k) => HAFU_LABEL[k] || null) },
       },
-      /* 云端函数会在这两项里塞 Coral 赔率和市场平均概率；
-         没有的话就是 null，界面显示"未接入"。 */
+      /* 云端函数会塞进来：Coral 赔率、市场平均概率、交战历史、近 5 场。
+         没有的话就是空值，界面显示"未接入"。 */
       coral: it.coral || null,
       marketProb: it.marketProb || null,
-      h2h: [],
-      recent: { home: [], away: [] },
+      h2h: it.h2h || [],
+      recent: it.recent || { home: [], away: [] },
     };
   }
 
